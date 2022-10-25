@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.idea/
+__pycache__/
+checkpoint/
+bert_en_uncased_preprocess/
+bert_zh_L-12_H-768_A-12_4/
+bert_zh_preprocess/
