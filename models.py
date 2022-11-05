@@ -12,9 +12,8 @@ import tensorflow_text as text
 import keras.backend as K
 from keras.layers.core import Lambda
 import tensorflow_addons as tfa
+from keras import regularizers
 
-
-def Att(att_dim,inputs,name):   # 没用到
 def Att(att_dim,inputs,name):
     V = inputs
     QK = Dense(att_dim,bias=None)(inputs)
@@ -29,10 +28,16 @@ class BiLSTM_Att(Model):
         self.bertEncoder = hub.KerasLayer("bert_zh_L-12_H-768_A-12_4",trainable=True)   # 利用预训练bert对输入进行embedding
         self.bilstm = Bidirectional(LSTM(units=128,return_sequences=True),input_shape=(),name='bi-lstm')
         self.dropout = Dropout(0.5,name='dropout')
-        self.att_dense1 = Dense(att_dim,use_bias=True,activation='tanh')
-        self.att_dense2 = Dense(256,use_bias=False,activation='softmax')
-        self.dense = Dense(TAG_LEN,activation='softmax')
+        self.att_dense1 = Dense(att_dim,use_bias=True,activation='tanh',
+                                kernel_regularizer=regularizers.l2(0.01),
+                                bias_regularizer=regularizers.l2(0.01))
+        self.att_dense2 = Dense(256,use_bias=False,activation='softmax',
+                                kernel_regularizer=regularizers.l2(0.01),
+                                activity_regularizer=regularizers.l1_l2(0.01))
+        self.dropout2 = Dropout(0.5,name='dropout2')
+        self.dense = Dense(TAG_LEN,activation='softmax',kernel_regularizer=regularizers.l2(0.01),bias_regularizer=regularizers.l2(0.01))
     def call(self,x):
+        print('input:',x)
         x = self.bertPre(x) # 预处理语句，将字符序列转换为三个编码后的向量
         x = self.bertEncoder(x) # 对序列做embedding
         x = x['sequence_output']    # 只需要每个token的embedding
@@ -42,18 +47,26 @@ class BiLSTM_Att(Model):
         qk = self.att_dense1(v) # 注意力层的第一个全连接层，相当于H = K.tanh(K.dot(inputs, self.W) + self.b)
         score_mv = self.att_dense2(qk)  # 注意力层的第二个全连接层,相当于K.softmax(K.dot(H, self.V), axis=1)
         out = K.sum(score_mv,axis=1)    # 对一句话中所有token的分数求和
+        out = self.dropout2(out)
         y = self.dense(out) # 全连接层，输出33种类型的概率值
         # print('y.shape:', y.shape)
         return y
 
 if __name__ == '__main__':
-    preprocess = hub.KerasLayer('bert_zh_preprocess')
+
+
+    preprocessor = hub.load('bert_zh_preprocess')
+    tokenizer = hub.KerasLayer(preprocessor.tokenize)
+    special_tokens_dict = preprocessor.tokenize.get_special_tokens_dict()
+    print(special_tokens_dict)
     encoder = hub.KerasLayer("bert_zh_L-12_H-768_A-12_4",trainable=True)
+    encoder2 = hub.load("bert_zh_L-12_H-768_A-12_4")
+    mlm = hub.KerasLayer(encoder2.mlm, trainable=True)
     text_input = keras.layers.Input(shape=(),dtype=tf.string)
-    input = preprocess(text_input)
-    print('preprocess:',input)
-    pooled_output = encoder(input)['pooled_output']
-    print('pooled_output:',pooled_output)
+    input = tokenizer(text_input)
+    pooled_output = mlm(input)['sequence_output']
     model = keras.Model(text_input,pooled_output)
-    sents = tf.constant(['你好'])
+    sents = tf.constant(['大家好啊我是说的道理，今天给大家来点想看的东西啊。',
+                         '大家好啊我是说的道理，今天给大家来点想看的东西啊。',
+                         '大家好啊我是说的道理，今天给大家来点想看的东西啊。'])
     print(model(sents))

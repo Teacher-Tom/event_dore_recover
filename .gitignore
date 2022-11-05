@@ -134,3 +134,9 @@ checkpoint/
 bert_en_uncased_preprocess/
 bert_zh_L-12_H-768_A-12_4/
 bert_zh_preprocess/
+albert_large_google_zh/
+albert_small_zh_google/
+chinese_L-12_H-768_A-12/
+logs/
+output/
+training_diagrams/
